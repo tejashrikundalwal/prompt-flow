@@ -93,6 +93,9 @@ const Reports = () => {
   const [creditHistoryFilterOpen, setCreditHistoryFilterOpen] = useState(false);
   const [creditConsumptionFilterOpen, setCreditConsumptionFilterOpen] = useState(false);
 
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
+
   const [clickDataAccountId, setClickDataAccountId] = useState("");
   const [urlHistoryAccountId, setUrlHistoryAccountId] = useState("");
   const [creditHistoryAccountId, setCreditHistoryAccountId] = useState("");
