@@ -11,7 +11,6 @@ import {
   Tabs,
   Tab,
   Dropdown,
-  ProgressBar,
 } from "react-bootstrap";
 import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
@@ -22,8 +21,6 @@ import { urlService } from '../services/urlService';
 import { creditService } from '../services/creditService';
 import {
   FaCalendarAlt,
-  FaChevronLeft,
-  FaChevronRight,
 } from "react-icons/fa";
 import { FcClearFilters } from "react-icons/fc";
 import noRecordFound from "../assets/images/no-record.png";
@@ -102,22 +99,23 @@ const Reports = () => {
   const [creditConsumptionAccountId, setCreditConsumptionAccountId] = useState("");
 
   // SFTP Destination form states
-  const [sftpStep, setSftpStep] = useState(1);
   const [sftpFormData, setSftpFormData] = useState({
     destinationName: "",
-    description: "",
     host: "",
     port: "",
     username: "",
     password: "",
-    remotePath: "",
-    fileName: "",
-    fileFormat: "",
+    remoteDirectory: "",
+    filePrefix: "",
+    notifyEmail: "",
     schedule: "",
-    enabled: true,
+    date: null,
+    time: "",
   });
   const [sftpFormErrors, setSftpFormErrors] = useState({});
   const [sftpSubmitting, setSftpSubmitting] = useState(false);
+  const [sftpTesting, setSftpTesting] = useState(false);
+  const [sftpTestSuccess, setSftpTestSuccess] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -552,10 +550,10 @@ const Reports = () => {
 
   // SFTP Destination form handlers
   const handleSftpInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type } = e.target;
     setSftpFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     }));
     // Clear error for this field
     if (sftpFormErrors[name]) {
@@ -565,389 +563,154 @@ const Reports = () => {
         return newErrors;
       });
     }
+    // Reset test success when form changes
+    if (sftpTestSuccess) {
+      setSftpTestSuccess(false);
+    }
   };
 
-  const validateSftpStep = (step) => {
+  const handleSftpDateChange = (date) => {
+    setSftpFormData((prev) => ({
+      ...prev,
+      date: date,
+    }));
+    if (sftpFormErrors.date) {
+      setSftpFormErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.date;
+        return newErrors;
+      });
+    }
+    if (sftpTestSuccess) {
+      setSftpTestSuccess(false);
+    }
+  };
+
+  const isSftpFormValid = () => {
+    if (!sftpFormData.destinationName.trim()) return false;
+    if (!sftpFormData.host.trim()) return false;
+    if (!sftpFormData.port.trim()) return false;
+    if (isNaN(sftpFormData.port) || parseInt(sftpFormData.port) < 1 || parseInt(sftpFormData.port) > 65535) return false;
+    if (!sftpFormData.username.trim()) return false;
+    if (!sftpFormData.password.trim()) return false;
+    if (!sftpFormData.remoteDirectory.trim()) return false;
+    if (!sftpFormData.filePrefix.trim()) return false;
+    if (!sftpFormData.notifyEmail.trim()) return false;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sftpFormData.notifyEmail)) return false;
+    if (!sftpFormData.schedule) return false;
+    if (sftpFormData.schedule === "Once" && !sftpFormData.date) return false;
+    if (!sftpFormData.time.trim()) return false;
+    return true;
+  };
+
+  const validateSftpForm = () => {
     const errors = {};
     
-    switch (step) {
-      case 1:
-        if (!sftpFormData.destinationName.trim()) {
-          errors.destinationName = "Destination name is required";
-        }
-        if (!sftpFormData.host.trim()) {
-          errors.host = "Host is required";
-        }
-        if (!sftpFormData.port.trim()) {
-          errors.port = "Port is required";
-        } else if (isNaN(sftpFormData.port) || parseInt(sftpFormData.port) < 1 || parseInt(sftpFormData.port) > 65535) {
-          errors.port = "Port must be a valid number between 1 and 65535";
-        }
-        break;
-      case 2:
-        if (!sftpFormData.username.trim()) {
-          errors.username = "Username is required";
-        }
-        if (!sftpFormData.password.trim()) {
-          errors.password = "Password is required";
-        }
-        if (!sftpFormData.remotePath.trim()) {
-          errors.remotePath = "Remote path is required";
-        }
-        break;
-      case 3:
-        if (!sftpFormData.fileName.trim()) {
-          errors.fileName = "File name is required";
-        }
-        if (!sftpFormData.fileFormat) {
-          errors.fileFormat = "File format is required";
-        }
-        break;
-      default:
-        break;
+    if (!sftpFormData.destinationName.trim()) {
+      errors.destinationName = "Destination name is required";
+    }
+    if (!sftpFormData.host.trim()) {
+      errors.host = "Host is required";
+    }
+    if (!sftpFormData.port.trim()) {
+      errors.port = "Port is required";
+    } else if (isNaN(sftpFormData.port) || parseInt(sftpFormData.port) < 1 || parseInt(sftpFormData.port) > 65535) {
+      errors.port = "Port must be a valid number between 1 and 65535";
+    }
+    if (!sftpFormData.username.trim()) {
+      errors.username = "Username is required";
+    }
+    if (!sftpFormData.password.trim()) {
+      errors.password = "Password is required";
+    }
+    if (!sftpFormData.remoteDirectory.trim()) {
+      errors.remoteDirectory = "Remote directory is required";
+    }
+    if (!sftpFormData.filePrefix.trim()) {
+      errors.filePrefix = "File prefix is required";
+    }
+    if (!sftpFormData.notifyEmail.trim()) {
+      errors.notifyEmail = "Notify email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sftpFormData.notifyEmail)) {
+      errors.notifyEmail = "Please enter a valid email address";
+    }
+    if (!sftpFormData.schedule) {
+      errors.schedule = "Schedule is required";
+    }
+    if (sftpFormData.schedule === "Once" && !sftpFormData.date) {
+      errors.date = "Date is required when schedule is Once";
+    }
+    if (!sftpFormData.time.trim()) {
+      errors.time = "Time is required";
     }
     
     setSftpFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSftpNext = () => {
-    if (validateSftpStep(sftpStep)) {
-      setSftpStep((prev) => Math.min(prev + 1, 4));
+  const handleSftpTestConnection = async () => {
+    if (!validateSftpForm()) {
+      toast.error("Please fill all required fields correctly");
+      return;
     }
-  };
 
-  const handleSftpPrevious = () => {
-    setSftpStep((prev) => Math.max(prev - 1, 1));
+    setSftpTesting(true);
+    setSftpTestSuccess(false);
+    try {
+      // TODO: Replace with actual API call
+      // await sftpService.testConnection(sftpFormData);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      setSftpTestSuccess(true);
+      toast.success("Connection test successful!");
+    } catch (error) {
+      console.error("Error testing SFTP connection:", error);
+      toast.error("Connection test failed. Please check your credentials.");
+      setSftpTestSuccess(false);
+    } finally {
+      setSftpTesting(false);
+    }
   };
 
   const handleSftpSubmit = async () => {
-    if (validateSftpStep(4)) {
-      setSftpSubmitting(true);
-      try {
-        // TODO: Replace with actual API call
-        // await sftpService.createDestination(sftpFormData);
-        toast.success("SFTP destination created successfully!");
-        // Reset form
-        setSftpFormData({
-          destinationName: "",
-          description: "",
-          host: "",
-          port: "",
-          username: "",
-          password: "",
-          remotePath: "",
-          fileName: "",
-          fileFormat: "",
-          schedule: "",
-          enabled: true,
-        });
-        setSftpStep(1);
-      } catch (error) {
-        console.error("Error creating SFTP destination:", error);
-        toast.error("Failed to create SFTP destination");
-      } finally {
-        setSftpSubmitting(false);
-      }
+    if (!sftpTestSuccess) {
+      toast.error("Please test the connection first");
+      return;
     }
-  };
 
-  const renderSftpStep = () => {
-    switch (sftpStep) {
-      case 1:
-        return (
-          <div>
-            <h5 className="mb-4 fw-600">Basic Information</h5>
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Destination Name <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="destinationName"
-                value={sftpFormData.destinationName}
-                onChange={handleSftpInputChange}
-                placeholder="Enter destination name"
-                isInvalid={!!sftpFormErrors.destinationName}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.destinationName}
-              </Form.Control.Feedback>
-            </Form.Group>
+    if (!validateSftpForm()) {
+      toast.error("Please fill all required fields correctly");
+      return;
+    }
 
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">Description</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                name="description"
-                value={sftpFormData.description}
-                onChange={handleSftpInputChange}
-                placeholder="Enter description (optional)"
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Host <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="host"
-                value={sftpFormData.host}
-                onChange={handleSftpInputChange}
-                placeholder="Enter SFTP host"
-                isInvalid={!!sftpFormErrors.host}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.host}
-              </Form.Control.Feedback>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Port <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="port"
-                value={sftpFormData.port}
-                onChange={handleSftpInputChange}
-                placeholder="Enter port (default: 22)"
-                isInvalid={!!sftpFormErrors.port}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.port}
-              </Form.Control.Feedback>
-            </Form.Group>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div>
-            <h5 className="mb-4 fw-600">Connection Details</h5>
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Username <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="username"
-                value={sftpFormData.username}
-                onChange={handleSftpInputChange}
-                placeholder="Enter username"
-                isInvalid={!!sftpFormErrors.username}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.username}
-              </Form.Control.Feedback>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Password <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="password"
-                name="password"
-                value={sftpFormData.password}
-                onChange={handleSftpInputChange}
-                placeholder="Enter password"
-                isInvalid={!!sftpFormErrors.password}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.password}
-              </Form.Control.Feedback>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                Remote Path <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="remotePath"
-                value={sftpFormData.remotePath}
-                onChange={handleSftpInputChange}
-                placeholder="Enter remote path (e.g., /uploads)"
-                isInvalid={!!sftpFormErrors.remotePath}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.remotePath}
-              </Form.Control.Feedback>
-            </Form.Group>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div>
-            <h5 className="mb-4 fw-600">File Configuration</h5>
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                File Name <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Control
-                type="text"
-                name="fileName"
-                value={sftpFormData.fileName}
-                onChange={handleSftpInputChange}
-                placeholder="Enter file name pattern"
-                isInvalid={!!sftpFormErrors.fileName}
-              />
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.fileName}
-              </Form.Control.Feedback>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">
-                File Format <span className="text-danger">*</span>
-              </Form.Label>
-              <Form.Select
-                name="fileFormat"
-                value={sftpFormData.fileFormat}
-                onChange={handleSftpInputChange}
-                isInvalid={!!sftpFormErrors.fileFormat}
-              >
-                <option value="">Select file format</option>
-                <option value="CSV">CSV</option>
-                <option value="JSON">JSON</option>
-                <option value="XML">XML</option>
-                <option value="TXT">TXT</option>
-              </Form.Select>
-              <Form.Control.Feedback type="invalid">
-                {sftpFormErrors.fileFormat}
-              </Form.Control.Feedback>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Label className="fs-12">Schedule</Form.Label>
-              <Form.Select
-                name="schedule"
-                value={sftpFormData.schedule}
-                onChange={handleSftpInputChange}
-              >
-                <option value="">Select schedule</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-                <option value="MANUAL">Manual</option>
-              </Form.Select>
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Check
-                type="checkbox"
-                name="enabled"
-                label="Enable this destination"
-                checked={sftpFormData.enabled}
-                onChange={handleSftpInputChange}
-              />
-            </Form.Group>
-          </div>
-        );
-
-      case 4:
-        return (
-          <div>
-            <h5 className="mb-4 fw-600">Overview</h5>
-            <Card className="br-radius-12 card-nostyle" style={{ border: "1px solid #EAECEE" }}>
-              <Card.Body>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Destination Name</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.destinationName || "N/A"}</p>
-                  </Col>
-                </Row>
-                {sftpFormData.description && (
-                  <Row className="mb-3">
-                    <Col sm={4} className="text-start">
-                      <h6 className="mb-0 text-616161 fw-400 fs-12">Description</h6>
-                    </Col>
-                    <Col sm={8} className="text-start">
-                      <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.description}</p>
-                    </Col>
-                  </Row>
-                )}
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Host</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.host || "N/A"}</p>
-                  </Col>
-                </Row>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Port</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.port || "N/A"}</p>
-                  </Col>
-                </Row>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Username</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.username || "N/A"}</p>
-                  </Col>
-                </Row>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Remote Path</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.remotePath || "N/A"}</p>
-                  </Col>
-                </Row>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">File Name</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.fileName || "N/A"}</p>
-                  </Col>
-                </Row>
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">File Format</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.fileFormat || "N/A"}</p>
-                  </Col>
-                </Row>
-                {sftpFormData.schedule && (
-                  <Row className="mb-3">
-                    <Col sm={4} className="text-start">
-                      <h6 className="mb-0 text-616161 fw-400 fs-12">Schedule</h6>
-                    </Col>
-                    <Col sm={8} className="text-start">
-                      <p className="mb-0 fs-14 text-dark fw-600">{sftpFormData.schedule}</p>
-                    </Col>
-                  </Row>
-                )}
-                <Row className="mb-3">
-                  <Col sm={4} className="text-start">
-                    <h6 className="mb-0 text-616161 fw-400 fs-12">Status</h6>
-                  </Col>
-                  <Col sm={8} className="text-start">
-                    <p className="mb-0 fs-14 text-dark fw-600">
-                      {sftpFormData.enabled ? "Enabled" : "Disabled"}
-                    </p>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
-          </div>
-        );
-
-      default:
-        return null;
+    setSftpSubmitting(true);
+    try {
+      // TODO: Replace with actual API call
+      // await sftpService.createDestination(sftpFormData);
+      toast.success("SFTP destination created successfully!");
+      // Reset form
+      setSftpFormData({
+        destinationName: "",
+        host: "",
+        port: "",
+        username: "",
+        password: "",
+        remoteDirectory: "",
+        filePrefix: "",
+        notifyEmail: "",
+        schedule: "",
+        date: null,
+        time: "",
+      });
+      setSftpFormErrors({});
+      setSftpTestSuccess(false);
+    } catch (error) {
+      console.error("Error creating SFTP destination:", error);
+      toast.error("Failed to create SFTP destination");
+    } finally {
+      setSftpSubmitting(false);
     }
   };
 
@@ -2475,78 +2238,275 @@ const Reports = () => {
                             <Card.Header className="bg-white border-0 br-radius-12 rounded-bottom-0 fs-20 d-flex p-0">
                             </Card.Header>
                             <Card.Body className="p-4">
-                              <div className="mb-4">
-                                <ProgressBar 
-                                  now={(sftpStep / 4) * 100} 
-                                  variant="success" 
-                                  className="br-radius-8"
-                                  style={{ height: "8px" }}
-                                />
-                                <div className="d-flex justify-content-between mt-2">
-                                  <span className={`fs-12 ${sftpStep >= 1 ? 'text-success fw-600' : 'text-muted'}`}>
-                                    Step 1: Basic Info
-                                  </span>
-                                  <span className={`fs-12 ${sftpStep >= 2 ? 'text-success fw-600' : 'text-muted'}`}>
-                                    Step 2: Connection
-                                  </span>
-                                  <span className={`fs-12 ${sftpStep >= 3 ? 'text-success fw-600' : 'text-muted'}`}>
-                                    Step 3: File Config
-                                  </span>
-                                  <span className={`fs-12 ${sftpStep >= 4 ? 'text-success fw-600' : 'text-muted'}`}>
-                                    Step 4: Overview
-                                  </span>
-                                </div>
-                              </div>
-
                               <Card className="br-radius-12 card-nostyle" style={{ border: "1px solid #EAECEE" }}>
                                 <Card.Body className="p-4">
-                                  {renderSftpStep()}
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Destination Name <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="destinationName"
+                                          value={sftpFormData.destinationName}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter destination name"
+                                          isInvalid={!!sftpFormErrors.destinationName}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.destinationName}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Host <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="host"
+                                          value={sftpFormData.host}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter SFTP host"
+                                          isInvalid={!!sftpFormErrors.host}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.host}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                  </Row>
+
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Port <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="port"
+                                          value={sftpFormData.port}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter port (default: 22)"
+                                          isInvalid={!!sftpFormErrors.port}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.port}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          UserName <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="username"
+                                          value={sftpFormData.username}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter username"
+                                          isInvalid={!!sftpFormErrors.username}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.username}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                  </Row>
+
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Password <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="password"
+                                          name="password"
+                                          value={sftpFormData.password}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter password"
+                                          isInvalid={!!sftpFormErrors.password}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.password}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Remote Directory <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="remoteDirectory"
+                                          value={sftpFormData.remoteDirectory}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter remote directory path"
+                                          isInvalid={!!sftpFormErrors.remoteDirectory}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.remoteDirectory}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                  </Row>
+
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          File Prefix <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="text"
+                                          name="filePrefix"
+                                          value={sftpFormData.filePrefix}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter file prefix"
+                                          isInvalid={!!sftpFormErrors.filePrefix}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.filePrefix}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Notify Email <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="email"
+                                          name="notifyEmail"
+                                          value={sftpFormData.notifyEmail}
+                                          onChange={handleSftpInputChange}
+                                          placeholder="Enter email address"
+                                          isInvalid={!!sftpFormErrors.notifyEmail}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.notifyEmail}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                  </Row>
+
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Schedule <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Select
+                                          name="schedule"
+                                          value={sftpFormData.schedule}
+                                          onChange={handleSftpInputChange}
+                                          isInvalid={!!sftpFormErrors.schedule}
+                                        >
+                                          <option value="">Select schedule</option>
+                                          <option value="Once">Once</option>
+                                          <option value="Daily">Daily</option>
+                                        </Form.Select>
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.schedule}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                    <Col md={6}>
+                                      {sftpFormData.schedule === "Once" && (
+                                        <Form.Group className="mb-3">
+                                          <Form.Label className="fs-12">
+                                            Date <span className="text-danger">*</span>
+                                          </Form.Label>
+                                          <div
+                                            style={{
+                                              border: sftpFormErrors.date ? "1px solid #dc3545" : "1px solid #EAECEE",
+                                              borderRadius: "8px",
+                                            }}
+                                          >
+                                            <DatePicker
+                                              selected={sftpFormData.date}
+                                              onChange={handleSftpDateChange}
+                                              className="form-control border-0 search-fields GeneralSansMedium fw-500"
+                                              placeholderText="Select date"
+                                              minDate={new Date()}
+                                              dateFormat="MMM dd, yyyy"
+                                              showMonthDropdown
+                                              showYearDropdown
+                                              dropdownMode="select"
+                                              isClearable={false}
+                                            />
+                                          </div>
+                                          {sftpFormErrors.date && (
+                                            <div className="invalid-feedback d-block">
+                                              {sftpFormErrors.date}
+                                            </div>
+                                          )}
+                                        </Form.Group>
+                                      )}
+                                    </Col>
+                                  </Row>
+
+                                  <Row>
+                                    <Col md={6}>
+                                      <Form.Group className="mb-3">
+                                        <Form.Label className="fs-12">
+                                          Time <span className="text-danger">*</span>
+                                        </Form.Label>
+                                        <Form.Control
+                                          type="time"
+                                          name="time"
+                                          value={sftpFormData.time}
+                                          onChange={handleSftpInputChange}
+                                          isInvalid={!!sftpFormErrors.time}
+                                        />
+                                        <Form.Control.Feedback type="invalid">
+                                          {sftpFormErrors.time}
+                                        </Form.Control.Feedback>
+                                      </Form.Group>
+                                    </Col>
+                                  </Row>
                                 </Card.Body>
                               </Card>
 
-                              <div className="d-flex justify-content-between mt-4">
+                              <div className="d-flex justify-content-end gap-2 mt-4">
                                 <Button
-                                  variant="light"
-                                  onClick={handleSftpPrevious}
-                                  disabled={sftpStep === 1}
+                                  variant="outline-success"
+                                  onClick={handleSftpTestConnection}
+                                  disabled={sftpTesting || !isSftpFormValid()}
                                   className="d-flex align-items-center gap-2 br-radius-8"
-                                  style={{
-                                    border: "1px solid #EAECEE",
-                                    padding: "9px 15px",
-                                  }}
+                                  style={{ padding: "9px 15px" }}
                                 >
-                                  <FaChevronLeft size={12} />
-                                  <span className="fw-400 fs-12">Previous</span>
+                                  {sftpTesting ? (
+                                    <>
+                                      <Spinner size="sm" className="me-2" />
+                                      <span className="fw-400 fs-12">Testing...</span>
+                                    </>
+                                  ) : (
+                                    <span className="fw-400 fs-12">Test Connection</span>
+                                  )}
                                 </Button>
-
-                                {sftpStep < 4 ? (
-                                  <Button
-                                    variant="success"
-                                    onClick={handleSftpNext}
-                                    className="d-flex align-items-center gap-2 br-radius-8"
-                                    style={{ padding: "9px 15px" }}
-                                  >
-                                    <span className="fw-400 fs-12">Next</span>
-                                    <FaChevronRight size={12} />
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="success"
-                                    onClick={handleSftpSubmit}
-                                    disabled={sftpSubmitting}
-                                    className="d-flex align-items-center gap-2 br-radius-8"
-                                    style={{ padding: "9px 15px" }}
-                                  >
-                                    {sftpSubmitting ? (
-                                      <>
-                                        <Spinner size="sm" className="me-2" />
-                                        <span className="fw-400 fs-12">Submitting...</span>
-                                      </>
-                                    ) : (
-                                      <span className="fw-400 fs-12">Submit</span>
-                                    )}
-                                  </Button>
-                                )}
+                                <Button
+                                  variant="success"
+                                  onClick={handleSftpSubmit}
+                                  disabled={sftpSubmitting || !sftpTestSuccess}
+                                  className="d-flex align-items-center gap-2 br-radius-8"
+                                  style={{ padding: "9px 15px" }}
+                                >
+                                  {sftpSubmitting ? (
+                                    <>
+                                      <Spinner size="sm" className="me-2" />
+                                      <span className="fw-400 fs-12">Submitting...</span>
+                                    </>
+                                  ) : (
+                                    <span className="fw-400 fs-12">Submit</span>
+                                  )}
+                                </Button>
                               </div>
                             </Card.Body>
                           </Card>
